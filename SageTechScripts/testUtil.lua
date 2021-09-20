@@ -1,25 +1,7 @@
--- lib/foo/bar.lua
--- local pathOfThisFile = ... -- pathOfThisFile is now 'lib.foo.bar'
--- local folderOfThisFile = (...):match("(.-)[^%.]+$") -- returns 'lib.foo.'
--- 
--- require(folderOfThisFile  .. sg-defs.lua)
+dofile("sg.lua")
+dofile("sg-util.lua")
 
---package.path = './?.lua;' .. package.path
--- require("sg-defs.lua")
-
--- define SG_MSG_LEN_INSTALL             41
--- define SG_MSG_LEN_FLIGHT              17
--- define SG_MSG_LEN_OPMSG               17
--- define SG_MSG_LEN_GPS                 68
--- define SG_MSG_LEN_DATAREQ             9
--- define SG_MSG_LEN_TARGETREQ           12
--- define SG_MSG_LEN_MODE                10
-
-
-function main()
-    doCrcCheck()
-end
-
+print("SG_MSG_LEN_INSTALL = " .. SG_MSG_LEN_INSTALL)
 
 
 function doCrcCheck()
@@ -63,30 +45,35 @@ function doCrcCheck()
         
 end
 
+function testOffsetStatus()
+    local gps = sg_gps_t
+    local offset = 0
+    
+    gps.gpsValid = true
+    gps.fdeFail  = true
+    gps.lngEast  = true
+    gps.latNorth = true    
+    offset = calcOffsetStatus(gps)
+    print(offset)
+    
+    gps.gpsValid = false
+    gps.fdeFail  = false
+    gps.lngEast  = false
+    gps.latNorth = false
+    offset = calcOffsetStatus(gps)
+    print(offset)
+end      
 
-function calcChecksum(buffer) -- returns uint8_t
+function main()
+    
+    local val = 0xFA55
+    local buffer = {}
+    
+    uint162Buf(buffer, 1, val)
+    
+    print( string.format("0x%x",buffer[1]) )
+    print( string.format("0x%x",buffer[2]) )
 
-   local sum = 0x00
-    len = #buffer
-    print (len)
-   -- Add all bytes excluding checksum
-    for i = 1, len, 1 do
-        if buffer[i] then            
-            sum = sum + buffer[i]
-        end
-    end  
-    -- limit the value to 1 byte.
-    if sum > 0xFF then
-        sum = sum & 0xFF
-     end
-
-    return sum
 end
 
-function appendChecksum(buffer, len)
-   local crc =  calcChecksum(buffer, len)
-   table.insert(buffer, crc)
-end
-
--- do this last so it can load everything above.
 main()

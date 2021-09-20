@@ -1,32 +1,6 @@
+dofile("sg.lua")
 
 
-
-local SG_MSG_START_BYTE           =   0xAA
-local SG_MSG_TYPE_HOST_GPS       =   0x04
-local SG_MSG_LEN_GPS           =     68
-
-
--- gps definitions
-local SG_PAYLOAD_LEN_GPS  = SG_MSG_LEN_GPS - 5  -- the payload length.
-
-local PBASE               =     5   -- was 4 in c  -- the payload offset.
-local OFFSET_LONGITUDE    =     0   -- the longitude offset in the payload.
-local OFFSET_LATITUDE     =    11   -- the latitude offset in the payload.
-local OFFSET_SPEED        =    21   -- the ground speed offset in the payload.
-local OFFSET_TRACK        =    27   -- the ground track offset in the payload.
-local OFFSET_STATUS       =    35   -- the hemisphere/data status offset in the payload.
-local OFFSET_TIME         =    36   -- the time of fix offset in the payload.
-local OFFSET_HEIGHT       =    46   -- the GNSS height offset in the payload.
-local OFFSET_HPL          =    50   -- the horizontal protection limit offset in the payload.
-local OFFSET_HFOM         =    54   -- the horizontal figure of merit offset in the payload.
-local OFFSET_VFOM         =    58   -- the vertical figure of merit offset in the payload.
-local OFFSET_NACV         =    62   -- the navigation accuracy for velocity offset in the payload.
-
-local LEN_LNG             =    11   -- bytes in the longitude field
-local LEN_LAT             =    10   -- bytes in the latitude field
-local LEN_SPD             =     6   -- bytes in the speed over ground field
-local LEN_TRK             =     8   -- bytes in the ground track field
-local LEN_TIME            =    10   -- bytes in the time of fix field
 
 
 function main()
@@ -68,157 +42,7 @@ sg_gps_t =
     nacv,           -- Navigation Accuracy for Velocity (meters/second)
 } 
 
-function sgEncodeGPS(buffer, gps, msgId)
 
-   -- Validate all data inputs (debug mode, only)
-   -- checkGPSInputs(gps);
-
-   -- populate header
-   buffer[1]       = SG_MSG_START_BYTE;
-   buffer[2]       = SG_MSG_TYPE_HOST_GPS;
-   buffer[3]       = msgId;
-   buffer[4]       = SG_PAYLOAD_LEN_GPS;
-
-   -- populate longitude
-   charArray2Buf(buffer, PBASE + OFFSET_LONGITUDE, gps.longitude) --, LEN_LNG);
-
-   -- populate latitude
-   charArray2Buf(buffer, PBASE + OFFSET_LATITUDE, gps.latitude) --, LEN_LAT);
-
-   -- populate ground speed
-   charArray2Buf(buffer, PBASE + OFFSET_SPEED, gps.grdSpeed) --, LEN_SPD);
-
-   -- populate ground track
-   charArray2Buf(buffer, PBASE + OFFSET_TRACK, gps.grdTrack) --, LEN_TRK);
-
-   -- populate hemisphere/data status
-   --bit.bnot(n) -- bitwise not (~n)
-   
-   buffer[PBASE + OFFSET_STATUS] = calcOffsetStatus(gps) 
---    bit.bnot(gps.gpsValid)  << 7 |
---                                    gps.fdeFail    << 6 |
---                                    gps.lngEast    << 1 |
---                                    gps.latNorth;
-
-   -- populate time of fix
-   charArray2Buf(buffer, PBASE + OFFSET_TIME, gps.timeOfFix, LEN_TIME);
-
-   -- populate gnss height
-   float2Buf(buffer, PBASE + OFFSET_HEIGHT, gps.height);
-
-   -- populate HPL
-   float2Buf(buffer, PBASE + OFFSET_HPL, gps.hpl);
-
-   -- populate HFOM
-   float2Buf(buffer, PBASE + OFFSET_HFOM, gps.hfom);
-
-   -- populate VFOM
-   float2Buf(buffer, PBASE + OFFSET_VFOM, gps.vfom);
-
-   -- populate NACv
-   buffer[PBASE + OFFSET_NACV] = gps.nacv << 4;
-
-   -- populate checksum
-   appendChecksum(buffer);
-
-   return true;
-end
-
-function calcChecksum(buffer) -- returns uint8_t
-
-   local sum = 0x00
-    len = #buffer
-
-    -- Add all bytes excluding checksum
-    for i = 1, len, 1 do
-        if buffer[i] then    
-            print (string.format("0x%x", buffer[i] ) )
-            sum = sum + buffer[i]
-        end
-    end  
-    -- limit the value to 1 byte.
-    if sum > 0xFF then
-        sum = sum & 0xFF
-     end
-
-    return sum
-end
-
-function appendChecksum(buffer, len)
-   local crc =  calcChecksum(buffer, len)
-   table.insert(buffer, crc)
-end
-
-function charArray2Buf(buffer, position, charArray) -- , uint8_t len)
-    charArray = charArray:upper()
-    len = #charArray
-    for i = 1, len, 1 do    
-        buffer[position + i - 1] = string.byte(string.sub(charArray,i,i))
-    end
-end
-
-function calcOffsetStatus(gps)
-    local offsetStatus = 0
-    if not gps.gpsValid then
-        offsetStatus = 1 << 7
-    end
-    
-    if  gps.fdeFail then
-        offsetStatus = offsetStatus | 1 << 6
-    end
-    
-    if  gps.lngEast  then  
-        offsetStatus = offsetStatus | 1 << 1
-    end
-    
-    if  gps.latNorth then
-        offsetStatus = offsetStatus | 1 
-    end 
-    
-    return offsetStatus
-                                   
-end
-
-function testOffsetStatus()
-    local gps = sg_gps_t
-    local offset = 0
-    
-    gps.gpsValid = true
-    gps.fdeFail  = true
-    gps.lngEast  = true
-    gps.latNorth = true    
-    offset = calcOffsetStatus(gps)
-    print(offset)
-    
-    gps.gpsValid = false
-    gps.fdeFail  = false
-    gps.lngEast  = false
-    gps.latNorth = false
-    offset = calcOffsetStatus(gps)
-    print(offset)
-end
-
-function float2Buf(buffer, position, value)
-
-    local FLOAT_SIZE = 4
-    -- ensure we are dealting with a float
-    value =  value + 0.0
-   
-    -- c implementation
---    union
---    {
---       float val;
---       unsigned char bytes[FLOAT_SIZE];
---    } conversion;
-    
-    -- pack the string, then get the bytes.                
-    b = string.pack('f', value)
-
-    for i = 1, FLOAT_SIZE, 1 do
-        buffer[position + i - 1] = string.byte(b, i);        
-    end
-  
-end
 
 
 function testEncodeGPS1()
@@ -250,7 +74,7 @@ function testEncodeGPS1()
     sgEncodeGPS(buffer, gps, msgId);
 
     -- Test results:
-    print ("TESTING")
+    print ("Check GPS1 Results")
     
     assert(buffer[1]  == SG_MSG_START_BYTE);        -- Start byte
     assert(buffer[2]  == SG_MSG_TYPE_HOST_GPS);     -- Msg Type
@@ -321,6 +145,7 @@ function testEncodeGPS1()
     assert(buffer[67] == 0x00);                    -- NACv
     assert(buffer[68] == 0xF3);                    -- Checksum
    
+    print ("GPS1 Successful!")
 end
 
 -- /*
@@ -332,10 +157,10 @@ function testEncodeGPS2()
     --    Gps message data
     gps = sg_gps_t;
 
-    
+
     -- Test data.
     --    Gps message data
-   
+
     gps.longitude = "05833.91482";
     gps.latitude  = "4917.11266";
     gps.grdSpeed  = "125.80";
@@ -349,14 +174,16 @@ function testEncodeGPS2()
     gps.hpl = 60;
     gps.hfom = 176;
     gps.vfom = 75;
-    gps.nacv = 4; -- nacv0dot3
+    gps.nacv = sg_nacv_t.nacv0dot3 -- 44; -- nacv0dot3
 
-   --    Message ID
-   local msgId = 0x02;
+    --    Message ID
+    local msgId = 0x02;
 
-   -- Test function:
-   buffer = {} 
-   sgEncodeGPS(buffer, gps, msgId);
+    -- Test function:
+    buffer = {} 
+    sgEncodeGPS(buffer, gps, msgId);
+    
+    print ("Check GPS2 Results")
 
    -- Test results:   
     assert(buffer[1] == SG_MSG_START_BYTE);        -- Start byte
@@ -428,6 +255,7 @@ function testEncodeGPS2()
     assert(buffer[67] == 0x40);                    -- NACv
     assert(buffer[68] == 0x4A);                    -- ChecksumA
 
+    print ("GPS2 Successful!")
    return 0;
 end
 
